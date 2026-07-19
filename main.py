@@ -6,11 +6,14 @@ Main Entry Point
 from config.logging_config import logger
 
 from src.managers.dataset_manager import DatasetManager
+from src.eda.validator import DatasetValidator
 from src.eda.analyzer import EDAAnalyzer
 
 
 def print_dataset_overview(subjects):
-    """Print a quick overview of the loaded dataset."""
+    """
+    Print a quick overview of the loaded dataset.
+    """
 
     if not subjects:
         print("No subjects loaded.")
@@ -35,13 +38,18 @@ def print_dataset_overview(subjects):
 
 
 def main():
+    """
+    Execute the EMG Research Pipeline.
+    """
+
     logger.info("=" * 60)
     logger.info("Starting EMG Research Pipeline")
     logger.info("=" * 60)
 
-    # ==========================================================
-    # Dataset Loading
-    # ==========================================================
+    # ----------------------------------------------------------
+    # Load Dataset
+    # ----------------------------------------------------------
+
     dataset = DatasetManager()
     subjects = dataset.load()
 
@@ -50,9 +58,17 @@ def main():
 
     print_dataset_overview(subjects)
 
-    # ==========================================================
+    # ----------------------------------------------------------
+    # Dataset Validation
+    # ----------------------------------------------------------
+
+    validator = DatasetValidator()
+    validator.validate(subjects)
+
+    # ----------------------------------------------------------
     # Exploratory Data Analysis
-    # ==========================================================
+    # ----------------------------------------------------------
+
     eda = EDAAnalyzer()
     eda.analyze(subjects)
 
