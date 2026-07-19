@@ -1,29 +1,65 @@
+"""
+EMG Research Pipeline
+Main Entry Point
+"""
+
 from config.logging_config import logger
 
-from src.data.loader import DatasetLoader
+from src.managers.dataset_manager import DatasetManager
+from src.eda.analyzer import EDAAnalyzer
 
-logger.info("Starting EMG Research Pipeline")
 
-loader = DatasetLoader()
+def print_dataset_overview(subjects):
+    """Print a quick overview of the loaded dataset."""
 
-subjects = loader.load()
+    if not subjects:
+        print("No subjects loaded.")
+        return
 
-print()
+    first_subject = subjects[0]
+    first_trial = first_subject.trials[0]
 
-print("=" * 50)
+    print("\n" + "=" * 60)
+    print("DATASET OVERVIEW")
+    print("=" * 60)
 
-print(f"Subjects Loaded : {len(subjects)}")
+    print(f"Subjects Loaded : {len(subjects)}")
+    print(f"First Subject   : {first_subject.subject_id}")
+    print(f"Trials          : {first_subject.num_trials}")
 
-print(f"First Subject : {subjects[0].subject_id}")
+    print("\nFirst Trial")
+    print("-" * 60)
+    print(f"Filename : {first_trial.filename}")
+    print(f"Samples  : {first_trial.samples}")
+    print(f"Channels : {first_trial.channels}")
 
-print(f"Trials : {subjects[0].num_trials}")
 
-print()
+def main():
+    logger.info("=" * 60)
+    logger.info("Starting EMG Research Pipeline")
+    logger.info("=" * 60)
 
-trial = subjects[0].trials[0]
+    # ==========================================================
+    # Dataset Loading
+    # ==========================================================
+    dataset = DatasetManager()
+    subjects = dataset.load()
 
-print(trial.filename)
+    logger.info(f"Subjects Loaded : {dataset.subject_count}")
+    logger.info(f"Trials Loaded   : {dataset.trial_count}")
 
-print(trial.samples)
+    print_dataset_overview(subjects)
 
-print(trial.channels)
+    # ==========================================================
+    # Exploratory Data Analysis
+    # ==========================================================
+    eda = EDAAnalyzer()
+    eda.analyze(subjects)
+
+    logger.info("=" * 60)
+    logger.info("Pipeline Completed Successfully")
+    logger.info("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
