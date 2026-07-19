@@ -1,25 +1,66 @@
+"""
+Global configuration for the EMG Research Pipeline.
+"""
+
 from pathlib import Path
+
+# -------------------------------------------------
+# Project Paths
+# -------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-RAW_DATA = PROJECT_ROOT / "data" / "raw" / "DB1_Extracted"
+DATA_DIR = PROJECT_ROOT / "data"
 
-OUTPUT = PROJECT_ROOT / "output"
+RAW_DATA_DIR = DATA_DIR / "raw" / "DB1_Extracted"
 
-SAMPLING_RATE = 100
+PROCESSED_DATA_DIR = DATA_DIR / "processed"
 
-NUM_CHANNELS = 10
+OUTPUT_DIR = PROJECT_ROOT / "output"
 
-WINDOW_SIZE_MS = 200
+VALIDATION_DIR = OUTPUT_DIR / "validation"
+EDA_DIR = OUTPUT_DIR / "eda"
+PREPROCESS_DIR = OUTPUT_DIR / "preprocessing"
+FEATURE_DIR = OUTPUT_DIR / "features"
+MODEL_DIR = OUTPUT_DIR / "models"
+REPORT_DIR = OUTPUT_DIR / "reports"
 
-WINDOW_OVERLAP = 0.5
-
-LOWCUT = 20
-
-HIGHCUT = 450
-
-NOTCH_FREQ = 50
+# -------------------------------------------------
+# Dataset
+# -------------------------------------------------
 
 NUM_SUBJECTS = 27
-
 TRIALS_PER_SUBJECT = 3
+NUM_CHANNELS = 10
+
+SAMPLING_RATE = 100  # Hz (Ninapro DB1)
+
+# -------------------------------------------------
+# Windowing
+# -------------------------------------------------
+
+WINDOW_SIZE_MS = 200
+WINDOW_OVERLAP = 0.50
+
+# -------------------------------------------------
+# Signal Filtering
+# -------------------------------------------------
+
+LOWCUT = 20
+HIGHCUT = 450
+NOTCH_FREQ = 50
+
+# -------------------------------------------------
+# Create output folders automatically
+# -------------------------------------------------
+
+for folder in [
+    OUTPUT_DIR,
+    VALIDATION_DIR,
+    EDA_DIR,
+    PREPROCESS_DIR,
+    FEATURE_DIR,
+    MODEL_DIR,
+    REPORT_DIR,
+]:
+    folder.mkdir(parents=True, exist_ok=True)
