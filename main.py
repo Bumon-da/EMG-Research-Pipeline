@@ -3,14 +3,14 @@ EMG Research Pipeline
 Main Entry Point
 """
 
+from __future__ import annotations
+
 from config.logging_config import logger
-
-from src.managers.dataset_manager import DatasetManager
-from src.eda.validator import DatasetValidator
-from src.eda.analyzer import EDAAnalyzer
+from src.data.datamodels import Subject
+from src.pipeline import run_pipeline
 
 
-def print_dataset_overview(subjects):
+def print_dataset_overview(subjects: list[Subject]) -> None:
     """
     Print a quick overview of the loaded dataset.
     """
@@ -32,12 +32,14 @@ def print_dataset_overview(subjects):
 
     print("\nFirst Trial")
     print("-" * 60)
-    print(f"Filename : {first_trial.filename}")
-    print(f"Samples  : {first_trial.samples}")
-    print(f"Channels : {first_trial.channels}")
+    print(f"Filename           : {first_trial.filename}")
+    print(f"Samples            : {first_trial.samples}")
+    print(f"Channels           : {first_trial.channels}")
+    print(f"Has refined labels : {first_trial.has_refined_labels}")
+    print(f"Has glove data     : {first_trial.has_glove}")
 
 
-def main():
+def main() -> None:
     """
     Execute the EMG Research Pipeline.
     """
@@ -46,34 +48,13 @@ def main():
     logger.info("Starting EMG Research Pipeline")
     logger.info("=" * 60)
 
-    # ----------------------------------------------------------
-    # Load Dataset
-    # ----------------------------------------------------------
+    result = run_pipeline(status_callback=logger.info)
 
-    dataset = DatasetManager()
-    subjects = dataset.load()
-
-    logger.info(f"Subjects Loaded : {dataset.subject_count}")
-    logger.info(f"Trials Loaded   : {dataset.trial_count}")
-
-    print_dataset_overview(subjects)
-
-    # ----------------------------------------------------------
-    # Dataset Validation
-    # ----------------------------------------------------------
-
-    validator = DatasetValidator()
-    validator.validate(subjects)
-
-    # ----------------------------------------------------------
-    # Exploratory Data Analysis
-    # ----------------------------------------------------------
-
-    eda = EDAAnalyzer()
-    eda.analyze(subjects)
+    print_dataset_overview(result.subjects)
 
     logger.info("=" * 60)
     logger.info("Pipeline Completed Successfully")
+    logger.info(f"All outputs for this run are under: {result.experiment.path}")
     logger.info("=" * 60)
 
 

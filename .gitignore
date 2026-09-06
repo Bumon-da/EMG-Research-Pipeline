@@ -10,6 +10,9 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
+# Testing
+.pytest_cache/
+
 # VS Code
 .vscode/
 

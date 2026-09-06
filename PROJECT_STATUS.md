@@ -12,7 +12,7 @@
 
 # Current Version
 
-v0.2.0
+v0.4.0
 
 ---
 
@@ -47,13 +47,20 @@ Guidelines:
 - Full-file updates (no patch snippets)
 - Git versioning
 - Research-grade documentation
+- Reproducibility: fixed random seed, documented train/test split strategy, per-run output isolation
 
 ---
 
 # Current Architecture
 
 ```
-main.py
+main.py / app.py (Streamlit dashboard)
+    │
+    ▼
+src.pipeline.run_pipeline  <- single source of truth for a full run
+    │
+    ▼
+ExperimentManager (per-run output isolation)
     │
     ▼
 DatasetManager
@@ -64,9 +71,11 @@ DatasetLoader
     ▼
 Subjects
     │
-    ├── DatasetValidator
+    ├── DatasetValidator (basic + advanced integrity checks)
     │
-    ├── EDAAnalyzer
+    ├── EDAAnalyzer + Visualizer
+    │
+    ├── Splitter (repetition_split / subject_split)
     │
     ├── Preprocessing (planned)
     │
@@ -75,6 +84,10 @@ Subjects
     ├── Models (planned)
     │
     └── Evaluation (planned)
+
+Streamlit dashboard (app.py + pages/) reads pipeline output (CSV/JSON)
+for aggregate views, and loads single .mat files on demand for the raw
+signal browser - it does not reload the whole dataset per interaction.
 ```
 
 ---
@@ -85,6 +98,8 @@ Subjects
 EMG-Research-Pipeline/
 
 config/
+    settings.py
+    logging_config.py
 
 data/
     raw/
@@ -92,12 +107,15 @@ data/
     external/
 
 output/
+    experiments/<run_id>/   <- all outputs for one run live here
 
 src/
 
     data/
         datamodels.py
         loader.py
+        validator.py
+        splitter.py
 
     managers/
         dataset_manager.py
@@ -107,7 +125,8 @@ src/
     eda/
         analyzer.py
         statistics.py
-        validator.py
+        visualization.py
+        report.py
 
     preprocessing/
 
@@ -117,9 +136,28 @@ src/
 
     evaluation/
 
-tests/
+    dashboard/
+        data_access.py
+        state.py
 
-main.py
+    pipeline.py
+
+tests/
+    conftest.py
+    test_datamodels.py
+    test_statistics.py
+    test_splitter.py
+    test_validator.py
+    test_dashboard_data_access.py
+
+pages/
+    1_Raw_Signal_Browser.py
+    2_Validation.py
+    3_Gesture_Distribution.py
+    4_Cross_Subject_Comparison.py
+
+app.py       <- Streamlit dashboard entry point (streamlit run app.py)
+main.py      <- CLI entry point
 ```
 
 ---
@@ -129,12 +167,12 @@ main.py
 ## Core Infrastructure
 
 - [x] Logging
-- [x] Settings
-- [x] Data Models
-- [x] Dataset Loader
+- [x] Settings (with EMG_RAW_DATA_DIR override, RANDOM_SEED, split config)
+- [x] Data Models (now carry restimulus/rerepetition/glove)
+- [x] Dataset Loader (loads refined labels + glove; enforces array-length consistency)
 - [x] Dataset Manager
-- [x] Results Manager
-- [x] Experiment Manager
+- [x] Results Manager (CSV/text/JSON/figures; supports per-run output roots)
+- [x] Experiment Manager (per-run isolated output folder + manifest.json)
 
 ---
 
@@ -143,107 +181,109 @@ main.py
 - [x] Automatic loading
 - [x] Subject parsing
 - [x] Trial parsing
-- [x] MAT file reading
+- [x] MAT file reading (emg, glove, stimulus/restimulus, repetition/rerepetition, exercise)
 
 ---
 
-## Validation
+## Validation (v0.3.0 - Advanced)
 
 Implemented:
 
-- Missing values
-- NaN values
-- Infinite values
+- Missing / NaN / infinite values
+- Negative values (data-integrity flag specific to DB1's non-negative sensor output)
 - Empty channels
-- Constant channels
+- Constant channels (tolerance-based, not exact float equality)
+- Duplicate-trial detection (content hash)
+- Saturation / clipping detection (count + fraction based, tuned to avoid false positives on small samples)
+- Low-activity channel detection (possible poor electrode contact)
+- Trial duration outlier detection (per exercise)
+- Gesture class distribution + imbalance ratio, correctly keyed by (exercise, label)
 
-Outputs:
+Outputs (per run, under `output/experiments/<run_id>/validation/`):
 
-output/validation/
-
-- validation_summary.csv
 - validation_details.csv
+- validation_summary.csv
+- flagged_trials.csv
+- class_distribution.csv
+- integrity_report.txt
 
 ---
 
-## Exploratory Data Analysis
+## Exploratory Data Analysis (v0.4.0 - Visualization)
 
-Implemented
+Implemented:
 
 - Dataset summary
-- Descriptive statistics
-- CSV export
+- Descriptive statistics per trial
+- Raw signal plots, channel histograms/boxplots, channel-correlation heatmap (sampled trials)
+- Subject comparison (mean RMS by subject)
+- Gesture class distribution, faceted by exercise
+- Short text EDA report
 
-Outputs
-
-output/eda/
-
-- dataset_summary.csv
-- per-trial statistics
+Outputs: `output/experiments/<run_id>/eda/`
 
 ---
 
-# Current Dataset
+## Train / Test Split Strategy
 
-Database
+Implemented (`src/data/splitter.py`), not yet consumed by a training stage:
 
-Ninapro DB1
+- `repetition_split`: subject-dependent, split by repetition (default test reps [2, 5, 7])
+- `subject_split`: subject-independent, leave-N-subjects-out
+- Returns per-trial boolean masks (not per-sample objects) for memory/performance reasons at this dataset's scale (~12.5M samples)
+- `RANDOM_SEED` centralized in `config/settings.py`
 
-Current Statistics
+---
 
-Subjects: 27
+## Interactive Dashboard (v0.4.0)
 
-Trials: 81
+Implemented (`app.py` + `pages/`, run with `streamlit run app.py`):
 
-Channels: 10
+- **Home** - dataset overview from disk (no full load required) + a
+  "Run Full Pipeline Now" button that runs `src.pipeline.run_pipeline`
+  from the browser
+- **Raw Signal Browser** - subject/trial selection, on-demand single-trial
+  load, channel + time-window controls, interactive signal plot with the
+  gesture-label track synced underneath, optional glove overlay,
+  descriptive stats table
+- **Validation** - run picker, summary metrics, filterable flagged-trials
+  table, full integrity report
+- **Gesture Distribution** - run picker, one interactive chart per
+  exercise (never merged - see Key Finding #4)
+- **Cross-Subject Comparison** - mean RMS and data-quality issue counts
+  across all subjects, built from `validation_details.csv` (no raw data
+  reload)
 
-Total Samples:
+Architecture note: `src/pipeline.py` now holds the single
+load-validate-EDA sequence that both `main.py` and the dashboard's "Run
+Pipeline Now" button call, so the two entry points can't drift apart.
+Aggregate dashboard views (Validation, Gesture Distribution,
+Cross-Subject Comparison) read the CSV/JSON a run already produced rather
+than reloading the dataset; only the Raw Signal Browser touches `.mat`
+files directly, and only the one file being viewed.
 
-12,553,611
+---
 
-Sampling Rate:
+# Key Findings From This Pass (worth stating explicitly in any paper)
 
-100 Hz
+1. **Refined labels matter.** `restimulus`/`rerepetition` correct a reaction-time delay present in raw `stimulus`/`repetition`. The loader now reads both; `Trial.labels`/`Trial.reps` default to the refined fields.
+2. **`glove` (22-channel joint-angle) data exists in every file and is now captured**, even though nothing consumes it yet - available for a future auxiliary/validation signal.
+3. **NinaPro DB1's `emg` field is not raw broadband sEMG.** Values are non-negative, quantized (~0.0024 steps), consistent with the Otto Bock 13E200 sensor's onboard rectified/enveloped output rather than an AC-coupled waveform. The bandpass/notch filter settings in `config/settings.py` (20-450 Hz / 50 Hz notch) target raw sEMG and should be reconsidered for this signal when preprocessing is implemented (v0.5.0).
+4. **Gesture labels reset per exercise file.** Label 5 in `_E1` is not the same gesture as label 5 in `_E2`/`_E3`. All aggregation in this codebase now keys on `(exercise, label)` - this was a real bug caught and fixed during this pass (class distribution was initially merging labels across exercises).
+5. **`requirements.txt` was UTF-16 encoded** (likely `pip freeze` from PowerShell) - re-saved as UTF-8, since this can break `pip install -r` on some setups. (Caught and fixed twice during this project's development - worth double-checking with `file requirements.txt` after any edit to this file specifically, since a plain-text non-Python file's encoding won't surface as an import error the way a corrupted `.py` file would.)
 
 ---
 
 # Next Milestones
 
-## v0.3.0
-
-Dataset Validation (Advanced)
-
-- Duplicate detection
-- Signal ranges
-- RMS checks
-- Trial duration verification
-- Integrity report
-
----
-
-## v0.4.0
-
-Visualization
-
-- Raw signals
-- Histograms
-- Boxplots
-- Heatmaps
-- Subject comparison
-- Gesture distribution
-
----
-
 ## v0.5.0
 
 Signal Preprocessing
 
-- Bandpass filter
-- Notch filter
-- Rectification
-- Normalization
-- Windowing
-- Segmentation
+- Decide filtering approach appropriate for DB1's already-rectified signal (see Key Finding #3)
+- Rectification / normalization (revisit given #3)
+- Windowing (`WINDOW_SIZE_MS` / `WINDOW_OVERLAP` already configured, unused so far)
+- Segmentation, applied per the chosen split strategy's train/test masks
 
 ---
 
@@ -251,20 +291,9 @@ Signal Preprocessing
 
 Feature Extraction
 
-Time Domain
+Time Domain: RMS, MAV, WL, SSC, ZC, IEMG
 
-- RMS
-- MAV
-- WL
-- SSC
-- ZC
-- IEMG
-
-Frequency Domain
-
-- MDF
-- MNF
-- PSD
+Frequency Domain: MDF, MNF, PSD
 
 Wavelet Features
 
@@ -274,25 +303,11 @@ Wavelet Features
 
 Machine Learning
 
-Traditional
+Traditional: Random Forest, SVM, XGBoost
 
-- Random Forest
-- SVM
-- XGBoost
+Deep Learning: CNN, LSTM
 
-Deep Learning
-
-- CNN
-- LSTM
-
-Evaluation
-
-- Accuracy
-- Precision
-- Recall
-- F1
-- ROC
-- Confusion Matrix
+Evaluation: Accuracy, Precision, Recall, F1, ROC, Confusion Matrix (per-exercise, since label sets differ)
 
 ---
 
@@ -302,7 +317,7 @@ Complete Research Pipeline
 
 - Automated reports
 - HTML documentation
-- Experiment tracking
+- Experiment tracking (foundation now in place via ExperimentManager)
 - EMS integration
 - Dissertation-ready outputs
 
@@ -312,11 +327,11 @@ Complete Research Pipeline
 
 Current Version
 
-v0.2.0
+v0.4.0
 
-Latest Commit
+Latest Change
 
-feat: add dataset validation module and integrate pipeline
+feat: interactive Streamlit dashboard (raw signal browser, validation, gesture distribution, cross-subject comparison), pipeline logic consolidated into src/pipeline.py, per-trial mean RMS, on-demand single-trial loader
 
 ---
 
@@ -340,19 +355,20 @@ Always:
 
 ✔ Provide complete updated files during development
 
+✔ Run `pytest` before considering a change done
+
 ---
 
 # Current Focus
 
 Working on:
 
-Dataset Validation (Advanced)
+Deciding the preprocessing/filtering approach for v0.5.0, informed by Key Finding #3 above (DB1's `emg` is a rectified sensor envelope, not raw sEMG)
 
 Next:
 
-Visualization
+Signal Preprocessing (v0.5.0)
 
 Status:
 
-Pipeline Stable
-Ready for v0.3.0
+Pipeline Stable. Advanced validation, visualization, interactive dashboard, and split strategy in place. Ready for v0.5.0.

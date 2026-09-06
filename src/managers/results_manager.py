@@ -7,19 +7,21 @@ throughout the EMG Research Pipeline.
 Supported output types:
 - CSV files
 - Text reports
+- JSON files
 - Matplotlib figures
 
 Future support:
 - Excel workbooks
-- JSON files
 - HTML reports
 - Trained ML models
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -30,12 +32,17 @@ from config.settings import OUTPUT_DIR
 
 class ResultsManager:
     """
-    Handles creation of output directories and saving of
-    files generated during the pipeline.
+    Handles creation of output directories and saving of files generated
+    during the pipeline.
+
+    By default outputs go under the global `OUTPUT_DIR`. Pass an explicit
+    `output_root` (e.g. an `ExperimentManager.path`) to scope every save to
+    a single run instead, so repeated runs don't overwrite each other's
+    results.
     """
 
-    def __init__(self) -> None:
-        self.output_root = Path(OUTPUT_DIR)
+    def __init__(self, output_root: Path | None = None) -> None:
+        self.output_root = Path(output_root) if output_root is not None else Path(OUTPUT_DIR)
         self.output_root.mkdir(parents=True, exist_ok=True)
 
     def get_folder(self, folder: str) -> Path:
@@ -114,6 +121,31 @@ class ResultsManager:
         filepath.write_text(text, encoding="utf-8")
 
         logger.info(f"Text report saved -> {filepath}")
+
+        return filepath
+
+    # ---------------------------------------------------------
+    # JSON
+    # ---------------------------------------------------------
+
+    def save_json(
+        self,
+        data: dict[str, Any],
+        folder: str,
+        filename: str,
+    ) -> Path:
+        """
+        Save a dictionary as pretty-printed JSON.
+        """
+
+        filepath = self.get_folder(folder) / filename
+
+        filepath.write_text(
+            json.dumps(data, indent=2, default=str),
+            encoding="utf-8",
+        )
+
+        logger.info(f"JSON saved -> {filepath}")
 
         return filepath
 
