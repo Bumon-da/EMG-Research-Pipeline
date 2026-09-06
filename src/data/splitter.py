@@ -63,6 +63,7 @@ class TrialSplit:
 class SplitResult:
     strategy: str
     trials: list[TrialSplit] = field(default_factory=list)
+    _index: dict[tuple[str, str], TrialSplit] = field(default_factory=dict, init=False, repr=False, compare=False)
 
     @property
     def train_size(self) -> int:
@@ -73,10 +74,18 @@ class SplitResult:
         return sum(t.test_size for t in self.trials)
 
     def get(self, subject_id: str, trial_filename: str) -> TrialSplit | None:
-        for trial_split in self.trials:
-            if trial_split.subject_id == subject_id and trial_split.trial_filename == trial_filename:
-                return trial_split
-        return None
+        """
+        O(1) lookup via a lazily-built (subject_id, trial_filename) index,
+        rebuilt whenever `self.trials` has grown since the index was last
+        built - callers are free to append to `trials` (as `repetition_split`/
+        `subject_split` do while constructing a result) without going
+        through a setter.
+        """
+        if len(self._index) != len(self.trials):
+            self._index = {
+                (t.subject_id, t.trial_filename): t for t in self.trials
+            }
+        return self._index.get((subject_id, trial_filename))
 
 
 def repetition_split(

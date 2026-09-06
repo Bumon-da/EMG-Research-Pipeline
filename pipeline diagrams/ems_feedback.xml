@@ -1,0 +1,66 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="EMS Feedback Loop">
+    <mxGraphModel dx="1000" dy="700" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- EMG Input -->
+        <mxCell id="2" value="EMG Signal Input" style="rounded=1;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="100" y="300" width="180" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- ML Model -->
+        <mxCell id="3" value="ML Model (RF / LSTM)" style="rounded=1;fillColor=#d5e8d4;" vertex="1" parent="1">
+          <mxGeometry x="320" y="300" width="200" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Prediction -->
+        <mxCell id="4" value="Predicted Movement" style="rounded=1;fillColor=#d5e8d4;" vertex="1" parent="1">
+          <mxGeometry x="560" y="300" width="200" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- EMS Output -->
+        <mxCell id="5" value="EMS Stimulation (Actuator)" style="rounded=1;fillColor=#f8cecc;" vertex="1" parent="1">
+          <mxGeometry x="800" y="300" width="220" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Muscle Response -->
+        <mxCell id="6" value="Muscle Movement Response" style="rounded=1;fillColor=#fff2cc;" vertex="1" parent="1">
+          <mxGeometry x="800" y="420" width="220" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Feedback -->
+        <mxCell id="7" value="New EMG Signal (Feedback)" style="rounded=1;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="320" y="500" width="220" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell edge="1" source="2" target="3" parent="1" style="endArrow=block;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell edge="1" source="3" target="4" parent="1" style="endArrow=block;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell edge="1" source="4" target="5" parent="1" style="endArrow=block;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell edge="1" source="5" target="6" parent="1" style="endArrow=block;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell edge="1" source="6" target="7" parent="1" style="endArrow=block;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell edge="1" source="7" target="3" parent="1" style="endArrow=block;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

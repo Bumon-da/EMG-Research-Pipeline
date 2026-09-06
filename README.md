@@ -17,10 +17,18 @@ Each `.mat` file contains:
 
 | Field | Meaning |
 |---|---|
-| `emg` | (samples, 10) raw surface EMG |
+| `emg` | (samples, 10) EMG signal - see the envelope note below before assuming this is raw sEMG |
 | `glove` | (samples, 22) Cyberglove joint-angle signal |
 | `stimulus` / `repetition` | raw gesture / repetition labels (reaction-time delayed) |
 | `restimulus` / `rerepetition` | **refined** gesture / repetition labels, corrected for onset delay |
+
+**`emg` is not raw broadband sEMG.** Values are non-negative and quantized
+(~0.0024 steps), consistent with the Otto Bock 13E200 sensor's onboard
+rectified/enveloped output rather than an AC-coupled waveform - see
+`src/data/validator.py`. This is why no bandpass/notch filter is applied
+in this pipeline (v0.5.0's filter values are also mathematically invalid
+at this dataset's 100 Hz sampling rate regardless); see
+`src/preprocessing/filtering.py` and `PROJECT_STATUS.md`'s Key Findings.
 
 The loader reads all of these. Downstream code should default to
 `restimulus`/`rerepetition` via `Trial.labels` / `Trial.reps` rather than the raw
@@ -101,8 +109,8 @@ streamlit run app.py
 This opens in your browser (default `http://localhost:8501`). Pages:
 
 - **Home** — dataset overview (subject/trial counts on disk) and a
-  "Run Full Pipeline Now" button that runs load → validate → EDA into a new
-  experiment folder without leaving the browser.
+  "Run Full Pipeline Now" button that runs load → validate → EDA → split →
+  preprocess into a new experiment folder without leaving the browser.
 - **Raw Signal Browser** — pick a subject and trial, choose channels and a
   time window, and view the raw EMG (and glove, if present) signal
   interactively, with the gesture-label track lined up underneath. Loads
@@ -115,8 +123,11 @@ This opens in your browser (default `http://localhost:8501`). Pages:
 - **Cross-Subject Comparison** — mean signal amplitude (RMS) and
   data-quality issue counts across all subjects in a run, built from
   `validation_details.csv` (no raw data reload).
+- **Preprocessing** — per-subject normalization statistics, window
+  counts by exercise/split, and drop-reason breakdown (transition vs.
+  train/test boundary) for a chosen run.
 
-The Validation, Gesture Distribution, and Cross-Subject Comparison pages
+The Validation, Gesture Distribution, Cross-Subject Comparison, and Preprocessing pages
 read the CSV/JSON output of a pipeline run (`output/experiments/<run>/`),
 so run the pipeline at least once — either `python main.py` or the Home
 page's button — before expecting data there. The Raw Signal Browser reads

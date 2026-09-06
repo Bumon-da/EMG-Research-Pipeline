@@ -9,6 +9,7 @@ Supported output types:
 - Text reports
 - JSON files
 - Matplotlib figures
+- Parquet files (for row counts where CSV is untenable)
 
 Future support:
 - Excel workbooks
@@ -101,6 +102,28 @@ class ResultsManager:
             filename=filename,
             index=index,
         )
+
+    def save_parquet(
+        self,
+        dataframe: pd.DataFrame,
+        folder: str,
+        filename: str,
+        index: bool = False,
+        compression: str = "zstd",
+    ) -> Path:
+        """
+        Save a DataFrame as a Parquet file. Used where CSV is untenable at
+        the row count involved (e.g. per-window feature matrices) - CSV
+        stays the default everywhere else via save_csv/save_dataframe.
+        """
+
+        filepath = self.get_folder(folder) / filename
+
+        dataframe.to_parquet(filepath, index=index, compression=compression)
+
+        logger.info(f"Parquet saved -> {filepath}")
+
+        return filepath
 
     # ---------------------------------------------------------
     # Text

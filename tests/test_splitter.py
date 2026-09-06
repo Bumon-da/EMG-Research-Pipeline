@@ -61,6 +61,29 @@ def test_subject_split_holds_out_whole_subjects():
     assert s2_split.test_size == 5
 
 
+def test_split_result_get_after_appending_more_trials():
+    """
+    SplitResult.get() lazily indexes `self.trials` by (subject_id,
+    trial_filename); appending more trials after earlier `get()` calls
+    must still be reflected, not served from a stale cache.
+    """
+    trial_a = make_trial(filename="a.mat", n_samples=4)
+    subject_a = make_subject("S1", trials=[trial_a])
+
+    result = repetition_split([subject_a], test_repetitions=[])
+
+    # Trigger the lazy index build before more trials are appended.
+    assert result.get("S1", "a.mat") is not None
+    assert result.get("S2", "b.mat") is None
+
+    trial_b = make_trial(filename="b.mat", n_samples=4)
+    subject_b = make_subject("S2", trials=[trial_b])
+    more = repetition_split([subject_b], test_repetitions=[])
+    result.trials.extend(more.trials)
+
+    assert result.get("S2", "b.mat") is not None
+
+
 def test_subject_split_is_reproducible_with_seed():
     subjects = [make_subject(f"S{i}", trials=[make_trial(filename=f"s{i}.mat")]) for i in range(10)]
 

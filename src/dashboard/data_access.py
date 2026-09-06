@@ -116,6 +116,24 @@ def load_rectification_report(run: ExperimentRun) -> pd.DataFrame:
     return _read_csv_if_exists(run.preprocessing_dir / "rectification_report.csv")
 
 
+def load_preprocessing_summary(run: ExperimentRun) -> dict:
+    summary_path = run.preprocessing_dir / "preprocessing_summary.json"
+
+    if not summary_path.exists():
+        return {}
+
+    return json.loads(summary_path.read_text(encoding="utf-8"))
+
+
+def load_preprocessing_report(run: ExperimentRun) -> str:
+    report_path = run.preprocessing_dir / "preprocessing_report.txt"
+
+    if not report_path.exists():
+        return ""
+
+    return report_path.read_text(encoding="utf-8")
+
+
 def load_integrity_report(run: ExperimentRun) -> str:
     report_path = run.validation_dir / "integrity_report.txt"
 

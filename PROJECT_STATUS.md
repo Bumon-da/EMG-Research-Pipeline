@@ -4,7 +4,7 @@
 
 **Author:** Priyangshu Protim Gogoi
 
-**Language:** Python 3.13+
+**Language:** Python 3.14+ (developed/tested on 3.14.4)
 
 **Status:** Active Development
 
@@ -12,7 +12,7 @@
 
 # Current Version
 
-v0.5.0
+v0.5.1
 
 ---
 
@@ -159,12 +159,14 @@ tests/
     test_filtering.py
     test_segmentation.py
     test_preprocessor.py
+    test_results_manager.py
 
 pages/
     1_Raw_Signal_Browser.py
     2_Validation.py
     3_Gesture_Distribution.py
     4_Cross_Subject_Comparison.py
+    5_Preprocessing.py
 
 app.py       <- Streamlit dashboard entry point (streamlit run app.py)
 main.py      <- CLI entry point
@@ -325,14 +327,47 @@ Implemented (`app.py` + `pages/`, run with `streamlit run app.py`):
 - **Cross-Subject Comparison** - mean RMS and data-quality issue counts
   across all subjects, built from `validation_details.csv` (no raw data
   reload)
+- **Preprocessing** (added v0.5.1) - run picker, headline metrics from
+  `preprocessing_summary.json`, per-subject normalization statistics
+  table, window counts by exercise/split, drop-reason breakdown
+  (transition vs. train/test boundary), rectification report, full text
+  report - the page deferred at the end of v0.5.0, once the read-side
+  plumbing (`ExperimentRun.preprocessing_dir` + loaders in
+  `src/dashboard/data_access.py`) already existed
 
 Architecture note: `src/pipeline.py` now holds the single
-load-validate-EDA sequence that both `main.py` and the dashboard's "Run
-Pipeline Now" button call, so the two entry points can't drift apart.
-Aggregate dashboard views (Validation, Gesture Distribution,
-Cross-Subject Comparison) read the CSV/JSON a run already produced rather
-than reloading the dataset; only the Raw Signal Browser touches `.mat`
-files directly, and only the one file being viewed.
+load-validate-EDA-split-preprocess sequence that both `main.py` and the
+dashboard's "Run Pipeline Now" button call, so the two entry points can't
+drift apart. Aggregate dashboard views (Validation, Gesture Distribution,
+Cross-Subject Comparison, Preprocessing) read the CSV/JSON a run already
+produced rather than reloading the dataset; only the Raw Signal Browser
+touches `.mat` files directly, and only the one file being viewed.
+
+---
+
+## v0.5.1 Housekeeping
+
+Small cleanup pass ahead of v0.6.0 Feature Extraction - no new pipeline
+stage, but two changes remove friction for it:
+
+- **`SplitResult.get()`** (`src/data/splitter.py`) now does an O(1) dict
+  lookup instead of a linear scan over every `TrialSplit`, via a lazily
+  built index that rebuilds itself if more trials are appended after the
+  first `get()` call.
+- **`ResultsManager.save_parquet()`** added, mirroring `save_csv`'s
+  signature/logging - v0.6.0's feature matrices will be too large for the
+  CSV convention used everywhere else in this pipeline. `pyarrow` pinned
+  explicitly in `requirements.txt` (was previously present only as a
+  transitive pandas 3.x dependency).
+- Removed `pipeline diagrams/evaluation_metrics.xml` (a byte-identical,
+  misnamed duplicate of `ems_feedback.xml`) and the stale
+  `setup_project.py` scaffolder (predated `src/managers/`,
+  `src/dashboard/`, `pages/`, `src/pipeline.py`).
+- Corrected inaccuracies: `README.md`'s field table called `emg` "raw
+  surface EMG" (contradicts Key Finding #3 below - it's an already-
+  rectified sensor envelope); `PROJECT_STATUS.md` said "Python 3.13+"
+  when runs are on 3.14.4; the Home page's button description undersold
+  what it actually runs.
 
 ---
 
@@ -397,11 +432,11 @@ Complete Research Pipeline
 
 Current Version
 
-v0.5.0
+v0.5.1
 
 Latest Change
 
-feat: signal preprocessing stage (src/preprocessing/ - rectification guard, per-subject/per-channel train-split-only z-score normalization, label/split-aware windowing+segmentation), makes src/data/splitter.py's train/test split a real pipeline consumer for the first time, bandpass/notch filter implemented but intentionally unused for DB1 (see Key Finding #3)
+chore: v0.5.1 housekeeping ahead of v0.6.0 - pages/5_Preprocessing.py dashboard page (the deferred v0.5.0 follow-up), SplitResult.get() now O(1) (dict index instead of a linear scan), ResultsManager.save_parquet() added ahead of v0.6.0's feature matrices, removed the byte-identical duplicate diagram file and the stale setup_project.py scaffolder, corrected README/PROJECT_STATUS inaccuracies (emg raw-sEMG claim, Python version, Home button's actual pipeline steps)
 
 ---
 
@@ -433,7 +468,7 @@ Always:
 
 Working on:
 
-v0.6.0, Feature Extraction (Time Domain: RMS, MAV, WL, SSC, ZC, IEMG; Frequency Domain: MDF, MNF, PSD; Wavelet Features), consuming the windows and normalization stats produced by v0.5.0
+v0.6.0, Feature Extraction (Atzori et al. 2014 DB1 baseline: RMS, MAV, WL, SSC, ZC/MCR, IEMG, HIST, mDWT), consuming the windows and normalization stats produced by v0.5.0. Frequency-domain features (MDF/MNF/PSD) are deliberately dropped - see the Key Findings this milestone will add.
 
 Next:
 
@@ -441,4 +476,4 @@ Feature Extraction (v0.6.0)
 
 Status:
 
-Pipeline Stable. Advanced validation, visualization, interactive dashboard, split strategy, and signal preprocessing (rectification, per-subject normalization, windowing/segmentation) all in place. Ready for v0.6.0.
+Pipeline Stable. Advanced validation, visualization, interactive dashboard, split strategy, and signal preprocessing (rectification, per-subject normalization, windowing/segmentation) all in place, including the Preprocessing dashboard page deferred from v0.5.0. Ready for v0.6.0.
