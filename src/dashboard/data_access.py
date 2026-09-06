@@ -36,6 +36,10 @@ class ExperimentRun:
     def eda_dir(self) -> Path:
         return self.path / "eda"
 
+    @property
+    def preprocessing_dir(self) -> Path:
+        return self.path / "preprocessing"
+
 
 # ----------------------------------------------------------------------
 # Experiment run discovery + cached outputs
@@ -94,6 +98,22 @@ def load_class_distribution(run: ExperimentRun) -> pd.DataFrame:
 
 def load_dataset_summary(run: ExperimentRun) -> pd.DataFrame:
     return _read_csv_if_exists(run.eda_dir / "dataset_summary.csv")
+
+
+def load_normalization_stats(run: ExperimentRun) -> pd.DataFrame:
+    return _read_csv_if_exists(run.preprocessing_dir / "normalization_stats.csv")
+
+
+def load_window_tally(run: ExperimentRun) -> pd.DataFrame:
+    return _read_csv_if_exists(run.preprocessing_dir / "window_tally.csv")
+
+
+def load_window_drop_summary(run: ExperimentRun) -> pd.DataFrame:
+    return _read_csv_if_exists(run.preprocessing_dir / "window_drop_summary.csv")
+
+
+def load_rectification_report(run: ExperimentRun) -> pd.DataFrame:
+    return _read_csv_if_exists(run.preprocessing_dir / "rectification_report.csv")
 
 
 def load_integrity_report(run: ExperimentRun) -> str:

@@ -13,6 +13,11 @@ from pathlib import Path
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
 
+# PROCESSED_DATA_DIR and PREPROCESS_DIR (below) are currently unused -
+# actual pipeline output (validation/eda/preprocessing) is written under
+# a per-run folder via ResultsManager(output_root=experiment.path), not
+# to these global paths. Kept for now; removing them is an unrelated
+# cleanup.
 DATA_DIR: Path = PROJECT_ROOT / "data"
 
 # The raw dataset directory is resolved in this order:
@@ -62,6 +67,13 @@ WINDOW_OVERLAP = 0.50
 # Signal Filtering
 # -------------------------------------------------
 
+# These are tuned for raw, AC-coupled sEMG at a realistic sampling rate -
+# they are NOT valid for SAMPLING_RATE=100 (Nyquist=50Hz: HIGHCUT exceeds
+# it, NOTCH_FREQ sits exactly on it), and NinaPro DB1's `emg` field is
+# already a rectified, non-negative sensor envelope, not raw sEMG (see
+# src/data/validator.py). src/preprocessing/filtering.py implements a
+# bandpass/notch filter using these values but is not invoked against
+# DB1 - it's reserved for a future raw-sEMG source (e.g. real hardware).
 LOWCUT = 20
 HIGHCUT = 450
 NOTCH_FREQ = 50

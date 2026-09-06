@@ -12,7 +12,7 @@
 
 # Current Version
 
-v0.4.0
+v0.5.0
 
 ---
 
@@ -77,7 +77,8 @@ Subjects
     │
     ├── Splitter (repetition_split / subject_split)
     │
-    ├── Preprocessing (planned)
+    ├── Preprocessing (rectification guard, per-subject normalization,
+    │                   windowing/segmentation - v0.5.0)
     │
     ├── Feature Extraction (planned)
     │
@@ -129,6 +130,11 @@ src/
         report.py
 
     preprocessing/
+        normalization.py
+        filtering.py
+        segmentation.py
+        preprocessor.py
+        report.py
 
     features/
 
@@ -149,6 +155,10 @@ tests/
     test_splitter.py
     test_validator.py
     test_dashboard_data_access.py
+    test_normalization.py
+    test_filtering.py
+    test_segmentation.py
+    test_preprocessor.py
 
 pages/
     1_Raw_Signal_Browser.py
@@ -226,12 +236,74 @@ Outputs: `output/experiments/<run_id>/eda/`
 
 ## Train / Test Split Strategy
 
-Implemented (`src/data/splitter.py`), not yet consumed by a training stage:
+Implemented (`src/data/splitter.py`); consumed by Signal Preprocessing (v0.5.0, below) for leakage-free normalization and split-aware windowing:
 
 - `repetition_split`: subject-dependent, split by repetition (default test reps [2, 5, 7])
 - `subject_split`: subject-independent, leave-N-subjects-out
 - Returns per-trial boolean masks (not per-sample objects) for memory/performance reasons at this dataset's scale (~12.5M samples)
 - `RANDOM_SEED` centralized in `config/settings.py`
+
+---
+
+## Signal Preprocessing (v0.5.0)
+
+Implemented (`src/preprocessing/`):
+
+- **Filtering decision (resolves Key Finding #3):** no bandpass/notch
+  filter is applied to NinaPro DB1. Its `emg` field is already a
+  rectified, non-negative sensor envelope, not raw sEMG, and the
+  configured filter values (`LOWCUT=20`, `HIGHCUT=450`, `NOTCH_FREQ=50`)
+  are mathematically invalid for `SAMPLING_RATE=100` anyway (Nyquist =
+  50Hz: `HIGHCUT` exceeds it, `NOTCH_FREQ` sits exactly on it).
+  `src/preprocessing/filtering.py`'s `bandpass_notch_filter()` implements
+  a real, tested Butterworth bandpass + IIR notch (and validates its own
+  arguments against Nyquist) for a future raw-sEMG source - it is not
+  invoked anywhere in the DB1 path.
+- **Rectification guard** (`Normalizer.clean`): clips stray negative
+  samples to 0 and neutralizes non-finite samples, so a single corrupted
+  trial can't silently poison a subject's normalization statistics. On
+  the real dataset today this clips 0 samples (validation already shows
+  0 negative/NaN/Inf values) - it exists for robustness, not because
+  today's data needs it.
+- **Per-subject, per-channel z-score normalization** (`Normalizer`),
+  computed from each subject's TRAIN-split samples only (via
+  `src/data/splitter.py` - its first real consumer since being built in
+  v0.4.0) and applied to both that subject's train and test rows, so
+  test-split values never influence the statistics used to scale them.
+  Falls back to a subject's full data if it has zero train samples (a
+  `subject_split`-only edge case), flagged via `UsedTestFallback`.
+- **Windowing/segmentation** (`src/preprocessing/segmentation.py`):
+  `WINDOW_SIZE_MS`/`WINDOW_OVERLAP` (200ms/50% -> 20-sample windows,
+  10-sample stride) are now consumed. A candidate window is kept only if
+  its label is uniform (drop label-transition windows) and it falls
+  entirely inside one side of the train/test split (drop windows
+  straddling the boundary - the rule `src/data/splitter.py`'s own
+  docstring anticipated). Windows carry index metadata only
+  (`start`/`end`/`label`/`split`), never a copy of the signal -
+  `trial.emg[start:end]` is a zero-copy view for feature extraction to
+  use later.
+
+Outputs (per run, under `output/experiments/<run_id>/preprocessing/`):
+
+- normalization_stats.csv, rectification_report.csv, window_tally.csv,
+  window_drop_summary.csv, preprocessing_summary.json,
+  preprocessing_report.txt
+
+On the real 27-subject/81-trial dataset (`repetition_split`, default test
+repetitions `[2, 5, 7]`): 1,201,946 windows kept (1,051,484 train /
+150,462 test), 53,298 dropped for a label transition, 0 dropped for a
+split boundary (the two are logically independent checks - see
+`tests/test_segmentation.py` - but happen to coincide on this dataset
+since every repetition boundary is also a label transition), 0 negative
+or non-finite samples clipped.
+
+Not included in this milestone (deliberately deferred): a
+`pages/5_Preprocessing.py` dashboard page. This project's own history
+shows the Validation page shipped a full version after the validation
+logic itself (v0.3.0 logic -> v0.4.0 page); the read-side plumbing
+(`ExperimentRun.preprocessing_dir` + 4 loader functions in
+`src/dashboard/data_access.py`) is in place so a page is a small
+follow-up whenever it's wanted.
 
 ---
 
@@ -268,7 +340,7 @@ files directly, and only the one file being viewed.
 
 1. **Refined labels matter.** `restimulus`/`rerepetition` correct a reaction-time delay present in raw `stimulus`/`repetition`. The loader now reads both; `Trial.labels`/`Trial.reps` default to the refined fields.
 2. **`glove` (22-channel joint-angle) data exists in every file and is now captured**, even though nothing consumes it yet - available for a future auxiliary/validation signal.
-3. **NinaPro DB1's `emg` field is not raw broadband sEMG.** Values are non-negative, quantized (~0.0024 steps), consistent with the Otto Bock 13E200 sensor's onboard rectified/enveloped output rather than an AC-coupled waveform. The bandpass/notch filter settings in `config/settings.py` (20-450 Hz / 50 Hz notch) target raw sEMG and should be reconsidered for this signal when preprocessing is implemented (v0.5.0).
+3. **NinaPro DB1's `emg` field is not raw broadband sEMG.** Values are non-negative, quantized (~0.0024 steps), consistent with the Otto Bock 13E200 sensor's onboard rectified/enveloped output rather than an AC-coupled waveform. The bandpass/notch filter settings in `config/settings.py` (20-450 Hz / 50 Hz notch) target raw sEMG and should be reconsidered for this signal when preprocessing is implemented (v0.5.0). **Resolved in v0.5.0:** the filter is not applied to DB1 (per-subject z-score normalization is used instead); it's also mathematically invalid for `SAMPLING_RATE=100` regardless (`HIGHCUT`/`NOTCH_FREQ` violate/hit the 50Hz Nyquist limit) - see "Signal Preprocessing (v0.5.0)" above and `src/preprocessing/filtering.py`.
 4. **Gesture labels reset per exercise file.** Label 5 in `_E1` is not the same gesture as label 5 in `_E2`/`_E3`. All aggregation in this codebase now keys on `(exercise, label)` - this was a real bug caught and fixed during this pass (class distribution was initially merging labels across exercises).
 5. **`requirements.txt` was UTF-16 encoded** (likely `pip freeze` from PowerShell) - re-saved as UTF-8, since this can break `pip install -r` on some setups. (Caught and fixed twice during this project's development - worth double-checking with `file requirements.txt` after any edit to this file specifically, since a plain-text non-Python file's encoding won't surface as an import error the way a corrupted `.py` file would.)
 
@@ -276,16 +348,7 @@ files directly, and only the one file being viewed.
 
 # Next Milestones
 
-## v0.5.0
-
-Signal Preprocessing
-
-- Decide filtering approach appropriate for DB1's already-rectified signal (see Key Finding #3)
-- Rectification / normalization (revisit given #3)
-- Windowing (`WINDOW_SIZE_MS` / `WINDOW_OVERLAP` already configured, unused so far)
-- Segmentation, applied per the chosen split strategy's train/test masks
-
----
+v0.5.0 (Signal Preprocessing) is complete - see "Signal Preprocessing (v0.5.0)" above.
 
 ## v0.6.0
 
@@ -296,6 +359,13 @@ Time Domain: RMS, MAV, WL, SSC, ZC, IEMG
 Frequency Domain: MDF, MNF, PSD
 
 Wavelet Features
+
+Consumes `src/preprocessing/segmentation.py`'s `segment_trial()` /
+`Window` (index metadata only - slice `trial.emg[start:end]` per window)
+and `src/preprocessing/normalization.py`'s `Normalizer.apply()` with a
+run's saved `SubjectNormalizationStats`, computing one feature vector per
+window rather than materializing the full window index or a normalized
+dataset copy.
 
 ---
 
@@ -327,11 +397,11 @@ Complete Research Pipeline
 
 Current Version
 
-v0.4.0
+v0.5.0
 
 Latest Change
 
-feat: interactive Streamlit dashboard (raw signal browser, validation, gesture distribution, cross-subject comparison), pipeline logic consolidated into src/pipeline.py, per-trial mean RMS, on-demand single-trial loader
+feat: signal preprocessing stage (src/preprocessing/ - rectification guard, per-subject/per-channel train-split-only z-score normalization, label/split-aware windowing+segmentation), makes src/data/splitter.py's train/test split a real pipeline consumer for the first time, bandpass/notch filter implemented but intentionally unused for DB1 (see Key Finding #3)
 
 ---
 
@@ -363,12 +433,12 @@ Always:
 
 Working on:
 
-Deciding the preprocessing/filtering approach for v0.5.0, informed by Key Finding #3 above (DB1's `emg` is a rectified sensor envelope, not raw sEMG)
+v0.6.0, Feature Extraction (Time Domain: RMS, MAV, WL, SSC, ZC, IEMG; Frequency Domain: MDF, MNF, PSD; Wavelet Features), consuming the windows and normalization stats produced by v0.5.0
 
 Next:
 
-Signal Preprocessing (v0.5.0)
+Feature Extraction (v0.6.0)
 
 Status:
 
-Pipeline Stable. Advanced validation, visualization, interactive dashboard, and split strategy in place. Ready for v0.5.0.
+Pipeline Stable. Advanced validation, visualization, interactive dashboard, split strategy, and signal preprocessing (rectification, per-subject normalization, windowing/segmentation) all in place. Ready for v0.6.0.
