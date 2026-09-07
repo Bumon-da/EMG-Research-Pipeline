@@ -61,7 +61,10 @@ def build_preprocessing_report(
 
     if not window_tally_df.empty:
         lines.append("")
-        lines.append("Window counts by exercise (train+test, label 0 = rest):")
+        lines.append(
+            "Window counts by exercise (train+test; label 0 denotes rest, "
+            "when the split includes it):"
+        )
         by_exercise = window_tally_df.groupby("Exercise")["WindowCount"].sum().sort_index()
         for exercise, count in by_exercise.items():
             lines.append(f"  Exercise {exercise}: {int(count):,} windows")

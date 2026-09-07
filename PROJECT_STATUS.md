@@ -12,7 +12,7 @@
 
 # Current Version
 
-v0.5.1
+v0.6.0
 
 ---
 
@@ -80,7 +80,8 @@ Subjects
     ├── Preprocessing (rectification guard, per-subject normalization,
     │                   windowing/segmentation - v0.5.0)
     │
-    ├── Feature Extraction (planned)
+    ├── Feature Extraction (time-domain, histogram, wavelet - v0.6.0,
+    │                        reuses Preprocessing's normalization stats)
     │
     ├── Models (planned)
     │
@@ -137,6 +138,11 @@ src/
         report.py
 
     features/
+        time_domain.py
+        wavelet.py
+        extractor.py
+        feature_matrix.py
+        report.py
 
     models/
 
@@ -160,6 +166,9 @@ tests/
     test_segmentation.py
     test_preprocessor.py
     test_results_manager.py
+    test_time_domain.py
+    test_wavelet.py
+    test_extractor.py
 
 pages/
     1_Raw_Signal_Browser.py
@@ -167,6 +176,7 @@ pages/
     3_Gesture_Distribution.py
     4_Cross_Subject_Comparison.py
     5_Preprocessing.py
+    6_Features.py
 
 app.py       <- Streamlit dashboard entry point (streamlit run app.py)
 main.py      <- CLI entry point
@@ -371,38 +381,97 @@ stage, but two changes remove friction for it:
 
 ---
 
+## Feature Extraction (v0.6.0)
+
+Implemented (`src/features/`): the Atzori et al. 2014 NinaPro DB1 baseline
+feature set, minus frequency-domain features (deliberately dropped - see
+below), computed per window from the per-subject z-score-normalized
+signal (never the raw envelope - a crossing-rate feature on DB1's
+non-negative raw `emg` is identically 0).
+
+- **Time-domain** (`time_domain.py`): RMS, MAV, WL, IEMG, MCR, SSC, and a
+  5-bin amplitude histogram (HIST), all vectorized over
+  `(n_windows, channels, window_len)` arrays - no per-window Python loop.
+- **MCR, not literature ZC:** DB1's `emg` is non-negative, so a plain
+  crossing test is identically 0 on the raw signal, and even after
+  z-scoring a single 200ms window frequently never crosses the
+  *subject's* global mean (measured: 18% of windows all-zero across every
+  channel). `mcr()` instead counts crossings of each *window's own* mean -
+  not comparable to literature ZC on raw sEMG.
+- **Wavelet** (`wavelet.py`): marginal DWT (mDWT) per-band energy. Atzori
+  used db7 at 5 levels; neither is possible on this dataset's 20-sample
+  window (`pywt.dwt_max_level(20, db7) == 0` - db7's 14-tap filter can't
+  decompose it at all). `db2` (4-tap) is the shortest common wavelet that
+  still permits a useful decomposition (`dwt_max_level(20, db2) == 2`) -
+  a deliberate deviation, not an oversight. Boundary mode pinned
+  explicitly (`mode="symmetric"`, PyWavelets' own default) so a future
+  library version can't silently shift every DWT feature.
+- **Frequency-domain features (MDF/MNF/PSD) deliberately NOT included:**
+  at a 20-sample window / 100Hz sampling rate, an FFT gives ~5Hz bins over
+  an already-rectified sensor envelope (Key Finding #3), not a motor-unit
+  firing spectrum - values would not be comparable to published sEMG
+  frequency-domain results.
+- **`EXCLUDE_REST`** (`config/settings.py`, now `True` pipeline-wide, not
+  just for this stage): NinaPro DB1's rest periods never fall in
+  `DEFAULT_TEST_REPETITIONS`, so without this the test split would
+  contain zero rest windows while train is dominated by them - the
+  largest class would never appear in test. This is a correctness fix
+  that also changed v0.5.0's own Preprocessing-stage window counts (both
+  stages now share one `split_result`) - see the updated numbers below.
+- **`GlobalLabel`:** NinaPro DB1 restarts gesture numbering at 1 for every
+  exercise file, but a per-subject feature file spans all three exercises.
+  `GlobalLabel` (`Label` + a per-exercise cumulative offset from
+  `EXERCISE_NUM_GESTURES`) is the column to train a classifier on -
+  `Label` alone silently collides gestures across exercises. A trial
+  whose exercise can't be identified gets `GlobalLabel = -1` (a sentinel
+  that can't collide with any real value) with a logged warning, rather
+  than silently defaulting to exercise 1's offset.
+- **Normalization stats are shared with Preprocessing, not recomputed:**
+  `FeatureExtractor.extract()` accepts `SignalPreprocessor`'s
+  `subject_stats` (both stages now consume the identical `split_result`,
+  so recomputing would just repeat an identical full-dataset scan) -
+  measured ~19% faster end-to-end (27.0s -> 21.8s) on the real dataset
+  from removing the duplicate scan. A caller that omits it (tests, or a
+  future caller with a different split) still gets independently computed
+  stats.
+- **Output** (`FeatureExtractor`, one Parquet file per subject plus run-level
+  summaries under `output/experiments/<run_id>/features/`): one row per
+  kept window - metadata (`Subject`, `Trial`, `Exercise`, `Label`,
+  `GlobalLabel`, `Split`, `Start`) plus 140 feature columns (10 channels x
+  (4 float + 2 crossing-count time-domain + 5 histogram-bin + 3
+  wavelet-band features)). `src/features/feature_matrix.py` is the
+  read-side API (used by the dashboard and by v0.7.0's model training) -
+  deliberately generic over a directory path, not `ExperimentRun`, so it
+  has no dependency on `src/dashboard`.
+- **Dashboard page** (`pages/6_Features.py`, added alongside this
+  milestone rather than deferred): headline metrics, feature columns by
+  group, per-subject file sizes/row counts (Parquet metadata only, no
+  data read), normalization stats, and the full text report.
+
+On the real 27-subject/81-trial dataset (`repetition_split`,
+`exclude_rest=True`, default test repetitions `[2, 5, 7]`): 349,204 train
+/ 150,462 test windows kept (down from v0.5.0's 1,051,484 train windows -
+`EXCLUDE_REST` removing rest samples, now applied pipeline-wide, is the
+reason; test count is unchanged since DB1's rest periods never fell in
+the test repetitions anyway), 140 feature columns, 21.8s extraction time.
+
+---
+
 # Key Findings From This Pass (worth stating explicitly in any paper)
 
 1. **Refined labels matter.** `restimulus`/`rerepetition` correct a reaction-time delay present in raw `stimulus`/`repetition`. The loader now reads both; `Trial.labels`/`Trial.reps` default to the refined fields.
 2. **`glove` (22-channel joint-angle) data exists in every file and is now captured**, even though nothing consumes it yet - available for a future auxiliary/validation signal.
 3. **NinaPro DB1's `emg` field is not raw broadband sEMG.** Values are non-negative, quantized (~0.0024 steps), consistent with the Otto Bock 13E200 sensor's onboard rectified/enveloped output rather than an AC-coupled waveform. The bandpass/notch filter settings in `config/settings.py` (20-450 Hz / 50 Hz notch) target raw sEMG and should be reconsidered for this signal when preprocessing is implemented (v0.5.0). **Resolved in v0.5.0:** the filter is not applied to DB1 (per-subject z-score normalization is used instead); it's also mathematically invalid for `SAMPLING_RATE=100` regardless (`HIGHCUT`/`NOTCH_FREQ` violate/hit the 50Hz Nyquist limit) - see "Signal Preprocessing (v0.5.0)" above and `src/preprocessing/filtering.py`.
-4. **Gesture labels reset per exercise file.** Label 5 in `_E1` is not the same gesture as label 5 in `_E2`/`_E3`. All aggregation in this codebase now keys on `(exercise, label)` - this was a real bug caught and fixed during this pass (class distribution was initially merging labels across exercises).
+4. **Gesture labels reset per exercise file.** Label 5 in `_E1` is not the same gesture as label 5 in `_E2`/`_E3`. All aggregation in this codebase now keys on `(exercise, label)` - this was a real bug caught and fixed during this pass (class distribution was initially merging labels across exercises). **v0.6.0:** a per-subject feature file spans all three exercises, so `src/features/extractor.py` adds a `GlobalLabel` column (`Label` + a per-exercise cumulative offset) as the column to train a classifier on - see "Feature Extraction (v0.6.0)" above.
 5. **`requirements.txt` was UTF-16 encoded** (likely `pip freeze` from PowerShell) - re-saved as UTF-8, since this can break `pip install -r` on some setups. (Caught and fixed twice during this project's development - worth double-checking with `file requirements.txt` after any edit to this file specifically, since a plain-text non-Python file's encoding won't surface as an import error the way a corrupted `.py` file would.)
 
 ---
 
 # Next Milestones
 
-v0.5.0 (Signal Preprocessing) is complete - see "Signal Preprocessing (v0.5.0)" above.
-
-## v0.6.0
-
-Feature Extraction
-
-Time Domain: RMS, MAV, WL, SSC, ZC, IEMG
-
-Frequency Domain: MDF, MNF, PSD
-
-Wavelet Features
-
-Consumes `src/preprocessing/segmentation.py`'s `segment_trial()` /
-`Window` (index metadata only - slice `trial.emg[start:end]` per window)
-and `src/preprocessing/normalization.py`'s `Normalizer.apply()` with a
-run's saved `SubjectNormalizationStats`, computing one feature vector per
-window rather than materializing the full window index or a normalized
-dataset copy.
-
----
+v0.5.0 (Signal Preprocessing) and v0.6.0 (Feature Extraction) are
+complete - see "Signal Preprocessing (v0.5.0)" and "Feature Extraction
+(v0.6.0)" above.
 
 ## v0.7.0
 
@@ -432,11 +501,11 @@ Complete Research Pipeline
 
 Current Version
 
-v0.5.1
+v0.6.0
 
 Latest Change
 
-chore: v0.5.1 housekeeping ahead of v0.6.0 - pages/5_Preprocessing.py dashboard page (the deferred v0.5.0 follow-up), SplitResult.get() now O(1) (dict index instead of a linear scan), ResultsManager.save_parquet() added ahead of v0.6.0's feature matrices, removed the byte-identical duplicate diagram file and the stale setup_project.py scaffolder, corrected README/PROJECT_STATUS inaccuracies (emg raw-sEMG claim, Python version, Home button's actual pipeline steps)
+feat: v0.6.0 feature extraction - Atzori et al. 2014 DB1 baseline (RMS, MAV, WL, IEMG, MCR, SSC, HIST, mDWT) computed per window from the per-subject-normalized signal, GlobalLabel column resolving cross-exercise label collisions, pages/6_Features.py dashboard page, EXCLUDE_REST correctness fix applied pipeline-wide, feature extraction reuses Preprocessing's normalization stats instead of recomputing them (~19% faster end-to-end), verified against the real 27-subject dataset
 
 ---
 
@@ -468,12 +537,12 @@ Always:
 
 Working on:
 
-v0.6.0, Feature Extraction (Atzori et al. 2014 DB1 baseline: RMS, MAV, WL, SSC, ZC/MCR, IEMG, HIST, mDWT), consuming the windows and normalization stats produced by v0.5.0. Frequency-domain features (MDF/MNF/PSD) are deliberately dropped - see the Key Findings this milestone will add.
+v0.7.0, Machine Learning (Random Forest, SVM, XGBoost; CNN, LSTM), training on the `GlobalLabel` column of v0.6.0's per-subject feature Parquet files (`src/features/feature_matrix.py`'s read-side API), split by the `Split` column that was already leakage-free at normalization time.
 
 Next:
 
-Feature Extraction (v0.6.0)
+Machine Learning (v0.7.0)
 
 Status:
 
-Pipeline Stable. Advanced validation, visualization, interactive dashboard, split strategy, and signal preprocessing (rectification, per-subject normalization, windowing/segmentation) all in place, including the Preprocessing dashboard page deferred from v0.5.0. Ready for v0.6.0.
+Pipeline Stable. Advanced validation, visualization, interactive dashboard, split strategy, signal preprocessing, and feature extraction (time-domain, histogram, wavelet - v0.6.0) all in place, each with its own dashboard page. Verified end-to-end against the real 27-subject dataset. Ready for v0.7.0.

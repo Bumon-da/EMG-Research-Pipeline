@@ -110,7 +110,8 @@ This opens in your browser (default `http://localhost:8501`). Pages:
 
 - **Home** — dataset overview (subject/trial counts on disk) and a
   "Run Full Pipeline Now" button that runs load → validate → EDA → split →
-  preprocess into a new experiment folder without leaving the browser.
+  preprocess → extract features into a new experiment folder without
+  leaving the browser.
 - **Raw Signal Browser** — pick a subject and trial, choose channels and a
   time window, and view the raw EMG (and glove, if present) signal
   interactively, with the gesture-label track lined up underneath. Loads
@@ -126,12 +127,18 @@ This opens in your browser (default `http://localhost:8501`). Pages:
 - **Preprocessing** — per-subject normalization statistics, window
   counts by exercise/split, and drop-reason breakdown (transition vs.
   train/test boundary) for a chosen run.
+- **Features** — the Atzori et al. 2014 NinaPro DB1 baseline feature set
+  (RMS, MAV, WL, IEMG, MCR, SSC, HIST, mDWT — frequency-domain features
+  deliberately excluded, see `PROJECT_STATUS.md`): headline metrics,
+  feature columns by group, per-subject file sizes, and normalization
+  statistics for a chosen run.
 
-The Validation, Gesture Distribution, Cross-Subject Comparison, and Preprocessing pages
-read the CSV/JSON output of a pipeline run (`output/experiments/<run>/`),
-so run the pipeline at least once — either `python main.py` or the Home
-page's button — before expecting data there. The Raw Signal Browser reads
-`.mat` files directly and doesn't need a prior run.
+The Validation, Gesture Distribution, Cross-Subject Comparison,
+Preprocessing, and Features pages read the CSV/JSON/Parquet output of a
+pipeline run (`output/experiments/<run>/`), so run the pipeline at least
+once — either `python main.py` or the Home page's button — before
+expecting data there. The Raw Signal Browser reads `.mat` files directly
+and doesn't need a prior run.
 
 ---
 

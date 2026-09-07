@@ -55,6 +55,13 @@ class ExperimentManager:
             "NOTCH_FREQ": settings.NOTCH_FREQ,
             "DEFAULT_TEST_REPETITIONS": settings.DEFAULT_TEST_REPETITIONS,
             "RAW_DATA_DIR": str(settings.RAW_DATA_DIR),
+            "EXCLUDE_REST": settings.EXCLUDE_REST,
+            "EXERCISE_NUM_GESTURES": settings.EXERCISE_NUM_GESTURES,
+            "MCR_THRESHOLD": settings.MCR_THRESHOLD,
+            "SSC_THRESHOLD": settings.SSC_THRESHOLD,
+            "HIST_BIN_EDGES": settings.HIST_BIN_EDGES,
+            "WAVELET": settings.WAVELET,
+            "WAVELET_LEVEL": settings.WAVELET_LEVEL,
         }
 
         manifest = {

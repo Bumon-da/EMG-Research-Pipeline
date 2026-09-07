@@ -119,6 +119,24 @@ def test_preprocess_window_tally_sums_to_manual_count(tmp_path):
     assert result.window_tally_df["WindowCount"].sum() == manual_total
 
 
+def test_preprocess_returns_subject_stats_dict_for_reuse_by_feature_extraction(tmp_path):
+    """
+    src/pipeline.py passes result.subject_stats into FeatureExtractor.extract()
+    so the two stages don't redundantly recompute identical stats from the
+    same split_result - see src/features/extractor.py's module docstring.
+    """
+    subjects = build_simple_subjects(n_subjects=2, n_channels=3)
+    split_result = repetition_split(subjects, test_repetitions=[2])
+
+    result = make_preprocessor(tmp_path).preprocess(subjects, split_result)
+
+    assert set(result.subject_stats.keys()) == {"S0", "S1"}
+    for subject_id, stats in result.subject_stats.items():
+        assert stats.subject_id == subject_id
+        assert stats.channel_mean.shape == (3,)
+        assert stats.channel_std.shape == (3,)
+
+
 def test_preprocess_summary_values_are_native_python_types(tmp_path):
     subjects = build_simple_subjects()
     split_result = repetition_split(subjects, test_repetitions=[2])

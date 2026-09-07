@@ -40,6 +40,10 @@ class ExperimentRun:
     def preprocessing_dir(self) -> Path:
         return self.path / "preprocessing"
 
+    @property
+    def features_dir(self) -> Path:
+        return self.path / "features"
+
 
 # ----------------------------------------------------------------------
 # Experiment run discovery + cached outputs
@@ -127,6 +131,32 @@ def load_preprocessing_summary(run: ExperimentRun) -> dict:
 
 def load_preprocessing_report(run: ExperimentRun) -> str:
     report_path = run.preprocessing_dir / "preprocessing_report.txt"
+
+    if not report_path.exists():
+        return ""
+
+    return report_path.read_text(encoding="utf-8")
+
+
+def load_feature_summary(run: ExperimentRun) -> dict:
+    summary_path = run.features_dir / "feature_summary.json"
+
+    if not summary_path.exists():
+        return {}
+
+    return json.loads(summary_path.read_text(encoding="utf-8"))
+
+
+def load_feature_manifest(run: ExperimentRun) -> pd.DataFrame:
+    return _read_csv_if_exists(run.features_dir / "feature_manifest.csv")
+
+
+def load_feature_normalization_stats(run: ExperimentRun) -> pd.DataFrame:
+    return _read_csv_if_exists(run.features_dir / "normalization_stats.csv")
+
+
+def load_features_report(run: ExperimentRun) -> str:
+    report_path = run.features_dir / "features_report.txt"
 
     if not report_path.exists():
         return ""

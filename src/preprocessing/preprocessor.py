@@ -28,7 +28,7 @@ from config.logging_config import logger
 from src.data.datamodels import Subject
 from src.data.splitter import SplitResult
 from src.managers.results_manager import ResultsManager
-from src.preprocessing.normalization import Normalizer
+from src.preprocessing.normalization import Normalizer, SubjectNormalizationStats
 from src.preprocessing.report import build_preprocessing_report
 from src.preprocessing.segmentation import Window, segment_trial_detailed
 
@@ -39,6 +39,9 @@ class PreprocessingResult:
     rectification_df: pd.DataFrame  # one row per (Subject, Trial)
     window_tally_df: pd.DataFrame  # one row per (Subject, Trial, Exercise, Label, Split)
     window_drop_summary_df: pd.DataFrame  # one row per (Subject, Trial)
+    subject_stats: dict[str, SubjectNormalizationStats]  # keyed by subject_id - feature
+    # extraction (src/features/extractor.py) consumes this so it can reuse this run's
+    # stats instead of recomputing an identical scan over the same split_result.
     summary: dict[str, Any]  # native int/bool/str only - keeps JSON output faithful
 
 
@@ -54,6 +57,7 @@ class SignalPreprocessor:
         rectification_rows: list[dict] = []
         tally_rows: list[dict] = []
         drop_summary_rows: list[dict] = []
+        subject_stats_by_id: dict[str, SubjectNormalizationStats] = {}
 
         subjects_with_zero_trials = 0
         subjects_with_train_fallback = 0
@@ -101,6 +105,8 @@ class SignalPreprocessor:
             )
             if subject_stats.used_test_fallback:
                 subjects_with_train_fallback += 1
+
+            subject_stats_by_id[subject.subject_id] = subject_stats
 
             for channel in range(subject_stats.channel_mean.shape[0]):
                 stats_rows.append(
@@ -191,6 +197,7 @@ class SignalPreprocessor:
             rectification_df=rectification_df,
             window_tally_df=window_tally_df,
             window_drop_summary_df=window_drop_summary_df,
+            subject_stats=subject_stats_by_id,
             summary=summary,
         )
 
